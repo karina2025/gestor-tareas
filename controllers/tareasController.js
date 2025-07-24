@@ -1,72 +1,118 @@
-import inquirer from 'inquirer';
-import { tareas } from '../data/tareas.js';
+// controllers/tareasController.js
+import Tarea from '../models/Tarea.js'; // Cambiar a import
+import { guardarDB, leerDB } from '../utils/fileManager.js'; // Cambiar a import
+import _ from 'lodash'; // Cambiar a import
 
-export async function agregarTarea() {
-  const { descripcion } = await inquirer.prompt([
-    { type: 'input', name: 'descripcion', message: 'Descripción de la tarea:' }
-  ]);
+class Tareas {
+    _listado = {};
 
-  const nueva = {
-    id: Date.now(),
-    descripcion: descripcion.trim(),
-    completada: false
-  };
-
-  tareas.push(nueva);
-  console.log('✅ Tarea agregada.');
-}
-
-export function listarTareas() {
-  if (tareas.length === 0) {
-    console.log('📭 No hay tareas registradas.');
-    return;
-  }
-
-  console.log('\n📋 Lista de tareas:');
-  tareas.forEach((tarea, i) => {
-    const estado = tarea.completada ? '✅' : '❌';
-    console.log(`${i + 1}. [${estado}] ${tarea.descripcion}`);
-  });
-}
-
-export async function editarTarea() {
-  if (tareas.length === 0) return console.log('⚠️ No hay tareas para editar.');
-
-  const { indice } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'indice',
-      message: 'Selecciona una tarea para editar:',
-      choices: tareas.map((t, i) => ({
-        name: t.descripcion,
-        value: i
-      }))
+    constructor() {
+        this._listado = {};
+        this.cargarTareasDesdeDB();
     }
-  ]);
 
-  const { nuevaDescripcion } = await inquirer.prompt([
-    { type: 'input', name: 'nuevaDescripcion', message: 'Nueva descripción:' }
-  ]);
-
-  tareas[indice].descripcion = nuevaDescripcion.trim();
-  console.log('✏️ Tarea actualizada.');
-}
-
-export async function eliminarTarea() {
-  if (tareas.length === 0) return console.log('⚠️ No hay tareas para eliminar.');
-
-  const { indice } = await inquirer.prompt([
-    {
-      type: 'list',
-      name: 'indice',
-      message: 'Selecciona una tarea para eliminar:',
-      choices: tareas.map((t, i) => ({
-        name: t.descripcion,
-        value: i
-      }))
+    get listadoArr() {
+        const listado = [];
+        Object.keys(this._listado).forEach(key => {
+            const tarea = this._listado[key];
+            listado.push(tarea);
+        });
+        return listado;
     }
-  ]);
 
-  tareas.splice(indice, 1);
-  console.log('🗑️ Tarea eliminada.');
+    cargarTareasDesdeDB() {
+        const tareasDB = leerDB();
+        if (tareasDB) {
+            tareasDB.forEach(tarea => {
+                this._listado[tarea.id] = tarea;
+            });
+        }
+    }
+
+    crearTarea(descripcion = '') {
+        if (_.isEmpty(descripcion)) {
+            console.log('❌ La descripción de la tarea no puede estar vacía.'.red);
+            return null;
+        }
+        const tarea = new Tarea(descripcion);
+        this._listado[tarea.id] = tarea;
+        this.guardarTareas();
+        console.log('✔ Tarea creada exitosamente.'.green);
+        return tarea;
+    }
+
+    listarTodasLasTareas() {
+        if (_.isEmpty(this.listadoArr)) {
+            console.log('\nNo hay tareas registradas.'.yellow);
+            return;
+        }
+        const tareasOrdenadas = _.orderBy(this.listadoArr, ['completadoEn', 'descripcion'], ['asc', 'asc']);
+
+        console.log('\nLista de Tareas:');
+        tareasOrdenadas.forEach((tarea, i) => {
+            const idx = `${i + 1}.`.green;
+            const estado = (tarea.completadoEn)
+                            ? 'Completada'.green + ` en: ${tarea.completadoEn.yellow}`
+                            : 'Pendiente'.red;
+            console.log(`${idx} ${tarea.descripcion} :: ${estado}`);
+        });
+    }
+
+    listarTareasPorEstado(completadas = true) {
+        const tareasFiltradas = this.listadoArr.filter(tarea => {
+            if (completadas) {
+                return tarea.completadoEn !== null;
+            } else {
+                return tarea.completadoEn === null;
+            }
+        });
+
+        if (_.isEmpty(tareasFiltradas)) {
+            console.log('\nNo hay tareas en este estado.'.yellow);
+            return;
+        }
+
+        console.log(`\nLista de Tareas ${completadas ? 'Completadas' : 'Pendientes'}:`);
+        tareasFiltradas.forEach((tarea, i) => {
+            const idx = `${i + 1}.`.green;
+            const estado = (tarea.completadoEn)
+                            ? `Completada en: ${tarea.completadoEn.green}`
+                            : 'Pendiente'.red;
+            console.log(`${idx} ${tarea.descripcion} :: ${estado}`);
+        });
+    }
+
+    borrarTarea(id = '') {
+        if (this._listado[id]) {
+            delete this._listado[id];
+            this.guardarTareas();
+            return true;
+        }
+        return false;
+    }
+
+    toggleCompletadas(ids = []) {
+        // Marcar las seleccionadas como completadas (si no lo están)
+        ids.forEach(id => {
+            const tarea = this._listado[id];
+            if (!tarea.completadoEn) {
+                tarea.completadoEn = new Date().toISOString();
+            }
+        });
+
+        // Marcar las NO seleccionadas como pendientes (si estaban completadas)
+        this.listadoArr.forEach(tarea => {
+            if (!_.includes(ids, tarea.id) && tarea.completadoEn) {
+                tarea.completadoEn = null;
+            }
+        });
+        this.guardarTareas();
+        console.log('✅ Estado de tareas actualizado.'.green);
+    }
+
+    guardarTareas() {
+        guardarDB(this.listadoArr);
+    }
 }
+
+export default Tareas; // Exportar la clase principal
