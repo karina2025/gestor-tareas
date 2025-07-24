@@ -1,0 +1,18 @@
+# Dependencias
+node_modules/
+/package-lock.json # Ignora también el package-lock.json
+
+# Archivos de depuración y logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# Archivos temporales de sistema operativo
+.DS_Store # macOS
+Thumbs.db # Windows
+
+# Archivos de configuración de entorno (si los usas)
+.env
+
+# Archivos de datos generados (como tu JSON de tareas)
+data/tareas.json
